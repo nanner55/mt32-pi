@@ -31,9 +31,16 @@
 #include <circle/spimaster.h>
 #include <circle/timer.h>
 
+#include <circle/bcm54213.h>
+#include <circle/net/netsubsystem.h>
+#include <wlan/bcm4343.h>
+#include <wlan/hostap/wpa_supplicant/wpasupplicant.h>
+
 #include "config.h"
 #include "mt32pi.h"
 #include "zoneallocator.h"
+
+#include "ftpserver.h"
 
 class CKernel : public CStdlibApp
 {
@@ -53,11 +60,17 @@ protected:
 	CLogger m_Logger;
 	CScheduler m_Scheduler;
 	CUSBHCIDevice m_USBHCI;
+#if RASPPI > 3
+	CBcm54213Device m_Bcm54213;
+#endif
 	CEMMCDevice m_EMMC;
 	FATFS m_FileSystem;
 	CI2CMaster m_I2CMaster;
 	CSPIMaster m_SPIMaster;
 	CGPIOManager m_GPIOManager;
+	CBcm4343Device m_WLAN;
+	CNetSubSystem* m_pNet;
+	CWPASupplicant m_WPASupplicant;
 
 private:
 	CZoneAllocator m_Allocator;

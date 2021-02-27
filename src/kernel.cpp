@@ -26,6 +26,9 @@
 #define MT32_PI_VERSION "<unknown>"
 #endif
 
+#define FIRMWARE_PATH "SD:/firmware/"
+#define CONFIG_FILE "SD:/wpa_supplicant.conf"
+
 CKernel::CKernel(void)
 	: CStdlibApp("mt32-pi"),
 
@@ -42,13 +45,16 @@ CKernel::CKernel(void)
 
 	  m_I2CMaster(1, true),
 	  m_GPIOManager(&mInterrupt),
+	  m_WLAN(FIRMWARE_PATH),
+	  m_pNet(nullptr),
+	  m_WPASupplicant(CONFIG_FILE),
 
 	  m_MT32Pi(&m_I2CMaster, &m_SPIMaster, &mInterrupt, &m_GPIOManager, &m_Serial, &m_USBHCI)
 {
 }
 
 bool CKernel::Initialize(void)
-{
+{	
 	if (!CStdlibApp::Initialize())
 		return false;
 
@@ -69,6 +75,8 @@ bool CKernel::Initialize(void)
 
 	if (!m_Logger.Initialize(pLogTarget))
 		return false;
+
+	m_Logger.Write(GetKernelName(), LogError, "Logger init complete");
 
 	if (!m_Timer.Initialize())
 		return false;
@@ -106,11 +114,82 @@ bool CKernel::Initialize(void)
 	if (!m_GPIOManager.Initialize())
 		return false;
 
+	if (m_Config.NetEnable
+#if defined(__aarch64__) && RASPPI <= 3
+	   // 64b RP3 doesn't currently support ethernet so skip net init
+       && m_Config.NetWifiEnable
+#endif
+	)
+	{
+		m_pNet = new CNetSubSystem(0, 0, 0, 0, DEFAULT_HOSTNAME, m_Config.NetWifiEnable ? NetDeviceTypeWLAN : NetDeviceTypeEthernet);
+		bool openEnable = m_Config.NetWifiOpenSSID.length();
+
+		if (m_Config.NetWifiEnable)
+		{
+			m_Logger.Write(GetKernelName(), LogNotice, "WLAN init begin");
+			if (m_Config.NetWifiEnable && !m_WLAN.Initialize())
+				return false;
+			m_Logger.Write(GetKernelName(), LogNotice, "WLAN init end");
+
+			if (m_Config.NetWifiEnable && openEnable)
+			{
+				m_Logger.Write(GetKernelName(), LogNotice, "WLAN open init begin");
+				if (!m_WLAN.JoinOpenNet(m_Config.NetWifiOpenSSID.c_str()))
+					return false;
+				m_Logger.Write(GetKernelName(), LogNotice, "WLAN open init end");
+			}
+		}
+		else
+		{
+			m_Logger.Write(GetKernelName(), LogNotice, "ETH init begin");
+#if RASPPI > 3
+			// Net also inits this for pi4.  Should this be removed?
+			if (!m_Config.NetWifiEnable && !m_Bcm54213.Initialize())
+				return false;
+#else
+#if !defined(__aarch64__) || !defined(LEAVE_QEMU_ON_HALT)
+			// The USB driver is not supported under 64-bit QEMU, so
+			// the initialization must be skipped in this case, or an
+			// exit happens here under 64-bit QEMU.
+			if (!m_USBHCI.Initialize())
+				return false;
+				
+#endif
+#endif
+			m_Logger.Write(GetKernelName(), LogNotice, "ETH init end");
+		}
+
+		m_Logger.Write(GetKernelName(), LogNotice, "NET init begin");
+		if (!m_pNet->Initialize(m_Config.NetWifiEnable ? FALSE : TRUE))
+			return false;
+		m_Logger.Write(GetKernelName(), LogNotice, "NET init end");
+
+		if (m_Config.NetWifiEnable && !openEnable)
+		{
+			m_Logger.Write(GetKernelName(), LogNotice, "WPA init begin");
+			if (!m_WPASupplicant.Initialize())
+				return false;
+			m_Logger.Write(GetKernelName(), LogNotice, "WPA init end");
+		}
+
+		m_Logger.Write(GetKernelName(), LogNotice, "NET wait begin");
+		while (!m_pNet->IsRunning())
+		{
+			m_Scheduler.MsSleep(1000);
+		}
+		m_Logger.Write(GetKernelName(), LogNotice, "NET wait end");
+		
+		CString IPString;
+		m_pNet->GetConfig()->GetIPAddress()->Format(&IPString);
+
+		m_Logger.Write (GetKernelName(), LogNotice, "Net IP: %s", (const char *) IPString);
+	}
+
 	// Init custom memory allocator
 	if (!m_Allocator.Initialize())
 		return false;
 
-	if (!m_MT32Pi.Initialize(bSerialMIDIEnabled))
+	if (!m_MT32Pi.Initialize(bSerialMIDIEnabled, m_pNet))
 		return false;
 
 	return true;

@@ -10,6 +10,7 @@ OBJS		:=	src/config.o \
 				src/control/rotaryencoder.o \
 				src/control/simplebuttons.o \
 				src/control/simpleencoder.o \
+				src/ftpserver.o \
 				src/kernel.o \
 				src/lcd/hd44780.o \
 				src/lcd/hd44780fourbit.o \
@@ -57,8 +58,11 @@ LIBS 		:=	$(CIRCLE_STDLIB_LIBS) \
 				$(CIRCLEHOME)/lib/input/libinput.a \
 				$(CIRCLEHOME)/addon/fatfs/libfatfs.a \
 				$(CIRCLEHOME)/lib/fs/libfs.a \
+				$(CIRCLEHOME)/addon/wlan/libwlan.a \
+				$(CIRCLEHOME)/lib/net/libnet.a \
 				$(CIRCLEHOME)/lib/sched/libsched.a \
-				$(CIRCLEHOME)/lib/libcircle.a
+				$(CIRCLEHOME)/lib/libcircle.a \
+				$(CIRCLEHOME)/addon/wlan/hostap/wpa_supplicant/libwpa_supplicant.a
 
 ifeq ($(HDMI_CONSOLE), 1)
 DEFINE		+=	-D HDMI_CONSOLE
@@ -80,3 +84,8 @@ VERSION=$(shell git describe --tags --dirty --always 2>/dev/null)
 ifneq ($(VERSION),)
 DEFINE		+=	-D MT32_PI_VERSION=\"$(VERSION)\"
 endif
+
+#
+# Add ftpserver requirements
+#
+CPPFLAGS	+=	-lstdc++ -std=c++17

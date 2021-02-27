@@ -86,6 +86,7 @@ private:
 	static bool ParseOption(const char* pString, bool* pOut);
 	static bool ParseOption(const char* pString, int* pOut, bool bHex = false);
 	static bool ParseOption(const char* pString, float* pOutFloat);
+	static bool ParseOption(const char* pString, std::string* pOutString);
 	static bool ParseOption(const char* pString, TSystemDefaultSynth* pOut);
 	static bool ParseOption(const char* pString, TAudioOutputDevice* pOut);
 	static bool ParseOption(const char* pString, TAudioI2CDACInit* pOut);

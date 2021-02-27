@@ -22,6 +22,7 @@
 
 #include <circle/i2ssoundbasedevice.h>
 #include <circle/memory.h>
+#include <circle/net/netsubsystem.h>
 #include <circle/pwmsoundbasedevice.h>
 #include <circle/serial.h>
 
@@ -66,6 +67,8 @@ CMT32Pi::CMT32Pi(CI2CMaster* pI2CMaster, CSPIMaster* pSPIMaster, CInterruptSyste
 	  m_pSerial(pSerialDevice),
 	  m_pUSBHCI(pUSBHCI),
 
+	  m_pFTPServer(nullptr),
+
 	  m_pLCD(nullptr),
 	  m_nLCDUpdateTime(0),
 
@@ -102,9 +105,10 @@ CMT32Pi::CMT32Pi(CI2CMaster* pI2CMaster, CSPIMaster* pSPIMaster, CInterruptSyste
 
 CMT32Pi::~CMT32Pi()
 {
+	delete m_pFTPServer;
 }
 
-bool CMT32Pi::Initialize(bool bSerialMIDIAvailable)
+bool CMT32Pi::Initialize(bool bSerialMIDIAvailable, CNetSubSystem* pNet)
 {
 	CConfig* const pConfig = CConfig::Get();
 	CLogger* const pLogger = CLogger::Get();
@@ -138,7 +142,7 @@ bool CMT32Pi::Initialize(bool bSerialMIDIAvailable)
 	// the initialization must be skipped in this case, or an
 	// exit happens here under 64-bit QEMU.
 	LCDLog(TLCDLogType::Startup, "Init USB");
-	if (pConfig->MIDIUSB && !m_pUSBHCI->Initialize())
+	if (pConfig->MIDIUSB && (!pConfig->NetEnable || pConfig->NetWifiEnable) && !m_pUSBHCI->Initialize())
 		return false;
 #endif
 
@@ -260,6 +264,19 @@ bool CMT32Pi::Initialize(bool bSerialMIDIAvailable)
 	// Start audio
 	m_pSound->Start();
 
+	// Start FTP server
+	if (pConfig->NetEnable && pConfig->NetFTPEnable && pNet)
+	{
+		// create and start FTP server
+		pLogger->Write(MT32PiName, LogNotice, "FTP server init");
+		m_pFTPServer = new CFTPServer(pNet);
+		if (!m_pFTPServer->Initialize(pConfig->NetFTPPort)) {
+			pLogger->Write(MT32PiName, LogWarning, "FTP server init failed");
+			delete m_pFTPServer;
+			m_pFTPServer = nullptr;
+		}
+	}
+
 	// Start other cores
 	if (!CMultiCoreSupport::Initialize())
 		return false;
@@ -330,6 +347,8 @@ void CMT32Pi::MainTask()
 				m_bSerialMIDIEnabled = false;
 			}
 		}
+		
+		// Check for FTP Server request
 	}
 
 	// Stop audio
@@ -436,6 +455,24 @@ void CMT32Pi::AudioTask()
 	}
 }
 
+void CMT32Pi::NetTask()
+{
+	CLogger* const pLogger = CLogger::Get();
+	pLogger->Write(MT32PiName, LogNotice, "Net task on Core 3 starting up");
+
+	if (m_pFTPServer)
+	{
+		pLogger->Write(MT32PiName, LogNotice, "Running FTP server");
+		while (m_bRunning)
+		{
+			m_pFTPServer->Run();
+		}
+	
+		pLogger->Write(MT32PiName, LogNotice, "Closing FTP server");
+		m_pFTPServer->Close();
+	}
+}
+
 void CMT32Pi::Run(unsigned nCore)
 {
 	// Assign tasks to different CPU cores
@@ -449,6 +486,9 @@ void CMT32Pi::Run(unsigned nCore)
 
 		case 2:
 			return AudioTask();
+
+		case 3:
+			return NetTask();
 
 		default:
 			break;

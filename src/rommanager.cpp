@@ -28,6 +28,12 @@
 const char ROMManagerName[] = "rommanager";
 const char ROMPath[] = "roms";
 
+const char *ROMDevices[] = {"USB:", "SD:"};
+static const size_t NumROMDevices = sizeof(ROMDevices)/sizeof(char *);
+static const size_t MaxROMDeviceName = 4;
+
+static FATFS FileSystem;
+
 // Filenames for original ROM loading behaviour
 const char MT32ControlROMName[] = "MT32_CONTROL.ROM";
 const char MT32PCMROMName[] = "MT32_PCM.ROM";
@@ -104,9 +110,22 @@ bool CROMManager::ScanROMs()
 	FILINFO FileInfo;
 	FRESULT Result = f_findfirst(&Dir, &FileInfo, ROMPath, "*");
 
-	char Path[sizeof(ROMPath) + FF_LFN_BUF];
-	strcpy(Path, ROMPath);
-	Path[sizeof(ROMPath) - 1] = '/';
+	char DeviceROMPath[sizeof(ROMPath) + MaxROMDeviceName];
+	for (size_t i = 0; i < NumROMDevices; i++)
+	{
+		strcpy(DeviceROMPath, ROMDevices[i]);
+		strcat(DeviceROMPath, ROMPath);
+
+		f_mount(&FileSystem, ROMDevices[i], 1);
+		Result = f_findfirst(&Dir, &FileInfo, DeviceROMPath, "*");
+		if (Result == FR_OK) break;
+
+		f_mount(0, ROMDevices[i], 0);
+	}
+
+	char Path[strlen(ROMPath) + 1 + FF_LFN_BUF];
+	strcpy(Path, DeviceROMPath);
+	Path[strlen(DeviceROMPath)] = '/';
 
 	// Loop over each file in the directory
 	while (Result == FR_OK && *FileInfo.fname)
@@ -115,7 +134,7 @@ bool CROMManager::ScanROMs()
 		if (!(FileInfo.fattrib & (AM_DIR | AM_HID | AM_SYS)))
 		{
 			// Assemble path
-			strcpy(Path + sizeof(ROMPath), FileInfo.fname);
+			strcpy(Path + strlen(DeviceROMPath) + 1, FileInfo.fname);
 
 			// Try to open file
 			CheckROM(Path);

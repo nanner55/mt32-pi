@@ -30,6 +30,12 @@
 const char SoundFontManagerName[] = "soundfontmanager";
 const char SoundFontPath[] = "soundfonts";
 
+const char *SoundFontDevices[] = {"USB:", "SD:"};
+static const size_t NumSoundFontDevices = sizeof(SoundFontDevices)/sizeof(char *);
+static const size_t MaxSoundFontDeviceName = 4;
+
+static FATFS FileSystem;
+
 // Four-character codes used throughout SoundFont RIFF structure
 constexpr u32 FourCC(const char pFourCC[4])
 {
@@ -62,11 +68,24 @@ bool CSoundFontManager::ScanSoundFonts()
 
 	DIR Dir;
 	FILINFO FileInfo;
-	FRESULT Result = f_findfirst(&Dir, &FileInfo, SoundFontPath, "*");
+	FRESULT Result;
 
-	char Path[sizeof(SoundFontPath) + FF_LFN_BUF];
-	strcpy(Path, SoundFontPath);
-	Path[sizeof(SoundFontPath) - 1] = '/';
+	char DeviceSoundFontPath[sizeof(SoundFontPath) + MaxSoundFontDeviceName];
+	for (size_t i = 0; i < NumSoundFontDevices; i++)
+	{
+		strcpy(DeviceSoundFontPath, SoundFontDevices[i]);
+		strcat(DeviceSoundFontPath, SoundFontPath);
+
+		f_mount(&FileSystem, SoundFontDevices[i], 1);
+		Result = f_findfirst(&Dir, &FileInfo, DeviceSoundFontPath, "*");
+		if (Result == FR_OK) break;
+
+		f_mount(0, SoundFontDevices[i], 0);
+	}
+
+	char Path[strlen(DeviceSoundFontPath) + 1 + FF_LFN_BUF];
+	strcpy(Path, DeviceSoundFontPath);
+	Path[strlen(DeviceSoundFontPath)] = '/';
 
 	// Loop over each file in the directory
 	while (Result == FR_OK && *FileInfo.fname && m_nSoundFonts < MaxSoundFonts)
@@ -75,7 +94,7 @@ bool CSoundFontManager::ScanSoundFonts()
 		if (!(FileInfo.fattrib & (AM_DIR | AM_HID | AM_SYS)))
 		{
 			// Assemble path
-			strcpy(Path + sizeof(SoundFontPath), FileInfo.fname);
+			strcpy(Path + strlen(DeviceSoundFontPath) + 1, FileInfo.fname);
 
 			CheckSoundFont(Path, FileInfo.fname);
 		}

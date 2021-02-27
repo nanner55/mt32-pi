@@ -43,6 +43,7 @@
 #include "control/control.h"
 #include "control/mister.h"
 #include "event.h"
+#include "ftpserver.h"
 #include "lcd/synthlcd.h"
 #include "midiparser.h"
 #include "pisound.h"
@@ -59,7 +60,7 @@ public:
 	CMT32Pi(CI2CMaster* pI2CMaster, CSPIMaster* pSPIMaster, CInterruptSystem* pInterrupt, CGPIOManager* pGPIOManager, CSerialDevice* pSerialDevice, CUSBHCIDevice* pUSBHCI);
 	virtual ~CMT32Pi() override;
 
-	bool Initialize(bool bSerialMIDIAvailable = true);
+	bool Initialize(bool bSerialMIDIAvailable = true, CNetSubSystem* pNet = nullptr);
 
 	virtual void Run(unsigned nCore) override;
 
@@ -90,6 +91,7 @@ private:
 	void MainTask();
 	void UITask();
 	void AudioTask();
+	void NetTask();
 
 	void UpdateMIDI();
 	size_t ReceiveSerialMIDI(u8* pOutData, size_t nSize);
@@ -120,6 +122,8 @@ private:
 	CGPIOManager* m_pGPIOManager;
 	CSerialDevice* m_pSerial;
 	CUSBHCIDevice* m_pUSBHCI;
+
+	CFTPServer* m_pFTPServer;
 
 	CSynthLCD* m_pLCD;
 	unsigned m_nLCDUpdateTime;

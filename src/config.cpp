@@ -146,6 +146,12 @@ bool CConfig::ParseOption(const char* pString, float* pOutFloat)
 	return true;
 }
 
+bool CConfig::ParseOption(const char* pString, std::string* pOutString)
+{
+	*pOutString = pString;
+	return true;
+}
+
 // Define template function wrappers for parsing enums
 CONFIG_ENUM_PARSER(TSystemDefaultSynth);
 CONFIG_ENUM_PARSER(TAudioOutputDevice);
